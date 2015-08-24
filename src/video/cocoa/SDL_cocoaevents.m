@@ -95,7 +95,7 @@
     [super dealloc];
 }
 
-- (void)windowWillClose:(NSNotification *)notification;
+- (void)windowWillClose:(NSNotification *)notification
 {
     NSWindow *win = (NSWindow*)[notification object];
 
