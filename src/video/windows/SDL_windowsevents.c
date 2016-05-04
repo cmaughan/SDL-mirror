@@ -1,6 +1,6 @@
 /*
   Simple DirectMedia Layer
-  Copyright (C) 1997-2015 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2016 Sam Lantinga <slouken@libsdl.org>
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
@@ -415,12 +415,19 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                  * FIXME: Update keyboard state
                  */
                 WIN_CheckClipboardUpdate(data->videodata);
+
+                SDL_ToggleModState(KMOD_CAPS, (GetKeyState(VK_CAPITAL) & 0x0001) != 0);
+                SDL_ToggleModState(KMOD_NUM, (GetKeyState(VK_NUMLOCK) & 0x0001) != 0);
             } else {
+                data->in_window_deactivation = SDL_TRUE;
+
                 if (SDL_GetKeyboardFocus() == data->window) {
                     SDL_SetKeyboardFocus(NULL);
                 }
 
                 ClipCursor(NULL);
+
+                data->in_window_deactivation = SDL_FALSE;
             }
         }
         returnCode = 0;
@@ -607,25 +614,26 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_UNICHAR:
-		if ( wParam == UNICODE_NOCHAR ) {
-			returnCode = 1;
-			break;
-		}
-		/* otherwise fall through to below */
-	case WM_CHAR:
-		{
-			char text[5];
-			if ( WIN_ConvertUTF32toUTF8( (UINT32)wParam, text ) ) {
-				SDL_SendKeyboardText( text );
-			}
-		}
-		returnCode = 0;
+        if ( wParam == UNICODE_NOCHAR ) {
+            returnCode = 1;
+            break;
+        }
+        /* otherwise fall through to below */
+    case WM_CHAR:
+        {
+            char text[5];
+            if ( WIN_ConvertUTF32toUTF8( (UINT32)wParam, text ) ) {
+                SDL_SendKeyboardText( text );
+            }
+        }
+        returnCode = 0;
         break;
 
 #ifdef WM_INPUTLANGCHANGE
     case WM_INPUTLANGCHANGE:
         {
             WIN_UpdateKeymap();
+            SDL_SendKeymapChangedEvent();
         }
         returnCode = 1;
         break;
@@ -735,7 +743,7 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             int x, y;
             int w, h;
             
-            if (data->in_border_change) {
+            if (data->initializing || data->in_border_change) {
                 break;
             }
 
@@ -813,9 +821,9 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     case WM_SYSCOMMAND:
         {
-			if ((wParam & 0xFFF0) == SC_KEYMENU) {
-				return (0);
-			}
+            if ((wParam & 0xFFF0) == SC_KEYMENU) {
+                return (0);
+            }
 
 #if defined(SC_SCREENSAVE) || defined(SC_MONITORPOWER)
             /* Don't start the screensaver or blank the monitor in fullscreen apps */
@@ -899,12 +907,13 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 if (buffer) {
                     if (DragQueryFile(drop, i, buffer, size)) {
                         char *file = WIN_StringToUTF8(buffer);
-                        SDL_SendDropFile(file);
+                        SDL_SendDropFile(data->window, file);
                         SDL_free(file);
                     }
                     SDL_stack_free(buffer);
                 }
             }
+            SDL_SendDropComplete(data->window);
             DragFinish(drop);
             return 0;
         }
@@ -919,15 +928,17 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     const SDL_Point point = { (int) winpoint.x, (int) winpoint.y };
                     const SDL_HitTestResult rc = window->hit_test(window, &point, window->hit_test_data);
                     switch (rc) {
-                        case SDL_HITTEST_DRAGGABLE: return HTCAPTION;
-                        case SDL_HITTEST_RESIZE_TOPLEFT: return HTTOPLEFT;
-                        case SDL_HITTEST_RESIZE_TOP: return HTTOP;
-                        case SDL_HITTEST_RESIZE_TOPRIGHT: return HTTOPRIGHT;
-                        case SDL_HITTEST_RESIZE_RIGHT: return HTRIGHT;
-                        case SDL_HITTEST_RESIZE_BOTTOMRIGHT: return HTBOTTOMRIGHT;
-                        case SDL_HITTEST_RESIZE_BOTTOM: return HTBOTTOM;
-                        case SDL_HITTEST_RESIZE_BOTTOMLEFT: return HTBOTTOMLEFT;
-                        case SDL_HITTEST_RESIZE_LEFT: return HTLEFT;
+                        #define POST_HIT_TEST(ret) { SDL_SendWindowEvent(data->window, SDL_WINDOWEVENT_HIT_TEST, 0, 0); return ret; }
+                        case SDL_HITTEST_DRAGGABLE: POST_HIT_TEST(HTCAPTION);
+                        case SDL_HITTEST_RESIZE_TOPLEFT: POST_HIT_TEST(HTTOPLEFT);
+                        case SDL_HITTEST_RESIZE_TOP: POST_HIT_TEST(HTTOP);
+                        case SDL_HITTEST_RESIZE_TOPRIGHT: POST_HIT_TEST(HTTOPRIGHT);
+                        case SDL_HITTEST_RESIZE_RIGHT: POST_HIT_TEST(HTRIGHT);
+                        case SDL_HITTEST_RESIZE_BOTTOMRIGHT: POST_HIT_TEST(HTBOTTOMRIGHT);
+                        case SDL_HITTEST_RESIZE_BOTTOM: POST_HIT_TEST(HTBOTTOM);
+                        case SDL_HITTEST_RESIZE_BOTTOMLEFT: POST_HIT_TEST(HTBOTTOMLEFT);
+                        case SDL_HITTEST_RESIZE_LEFT: POST_HIT_TEST(HTLEFT);
+                        #undef POST_HIT_TEST
                         case SDL_HITTEST_NORMAL: return HTCLIENT;
                     }
                 }
