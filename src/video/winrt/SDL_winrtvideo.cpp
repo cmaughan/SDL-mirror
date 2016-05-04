@@ -38,10 +38,10 @@ using namespace Windows::Foundation;
 using namespace Windows::Graphics::Display;
 using namespace Windows::UI::Core;
 using namespace Windows::UI::ViewManagement;
-
+ 
 
 /* [re]declare Windows GUIDs locally, to limit the amount of external lib(s) SDL has to link to */
-static const GUID IID_IDXGIFactory2 = { 0x50c83a1c, 0xe072, 0x4c48,{ 0x87, 0xb0, 0x36, 0x30, 0xfa, 0x36, 0xa6, 0xd0 } };
+//static const GUID IID_IDXGIFactory2 = { 0x50c83a1c, 0xe072, 0x4c48,{ 0x87, 0xb0, 0x36, 0x30, 0xfa, 0x36, 0xa6, 0xd0 } };
 
 
 /* SDL includes */
